@@ -1,0 +1,243 @@
+---
+# Certificate Webhook System - Go microservice implementation
+# Event-driven Docker certificate deployment system
+
+# ServiceAccount for cert-webhook components
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-webhook-handler
+  namespace: docker-stacks
+  annotations:
+    kubernetes.io/description: "Service account for certificate webhook system"
+
+---
+# RBAC permissions for reading Certificates and Secrets
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cert-webhook-handler
+  annotations:
+    kubernetes.io/description: "Permissions for certificate webhook system to read Certificate resources"
+rules:
+- apiGroups: ["cert-manager.io"]
+  resources: ["certificates"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cert-webhook-handler
+subjects:
+- kind: ServiceAccount
+  name: cert-webhook-handler
+  namespace: docker-stacks
+roleRef:
+  kind: ClusterRole
+  name: cert-webhook-handler
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Certificate Event Controller - Go-based controller
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-event-controller
+  namespace: docker-stacks
+  labels:
+    app.kubernetes.io/name: cert-event-controller
+    app.kubernetes.io/component: certificate-automation
+    app.kubernetes.io/part-of: docker-stacks-encrypted
+    app.kubernetes.io/version: "v1.0.0"
+  annotations:
+    kubernetes.io/description: "Go-based certificate event controller using Kubernetes informers"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cert-event-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cert-event-controller
+        app.kubernetes.io/component: certificate-automation
+    spec:
+      serviceAccountName: cert-webhook-handler
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: controller
+        image: cert-webhook-system:v1.0.0
+        command: ["/controller"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        env:
+        - name: CERT_WEBHOOK_WEBHOOK_URL
+          value: "http://cert-webhook-handler.docker-stacks.svc.cluster.local/webhook/certificate"
+        - name: CERT_WEBHOOK_LOG_LEVEL
+          value: "info"
+        - name: CERT_WEBHOOK_RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: url
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "pgrep controller"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "pgrep controller"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+---
+# Certificate Webhook Handler - Go-based HTTP server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-webhook-handler
+  namespace: docker-stacks
+  labels:
+    app.kubernetes.io/name: cert-webhook-handler
+    app.kubernetes.io/component: certificate-automation
+    app.kubernetes.io/part-of: docker-stacks-encrypted
+    app.kubernetes.io/version: "v1.0.0"
+  annotations:
+    kubernetes.io/description: "Go-based HTTP webhook handler with RabbitMQ publishing"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cert-webhook-handler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cert-webhook-handler
+        app.kubernetes.io/component: certificate-automation
+    spec:
+      serviceAccountName: cert-webhook-handler
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: webhook-handler
+        image: cert-webhook-system:v1.0.0
+        command: ["/webhook"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: CERT_WEBHOOK_PORT
+          value: "8080"
+        - name: CERT_WEBHOOK_LOG_LEVEL
+          value: "info"
+        - name: CERT_WEBHOOK_RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: url
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+---
+# Service for webhook handler
+apiVersion: v1
+kind: Service
+metadata:
+  name: cert-webhook-handler
+  namespace: docker-stacks
+  labels:
+    app.kubernetes.io/name: cert-webhook-handler
+    app.kubernetes.io/component: certificate-automation
+  annotations:
+    kubernetes.io/description: "HTTP service for Go-based certificate webhook handler"
+spec:
+  selector:
+    app.kubernetes.io/name: cert-webhook-handler
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+
+---
+# ServiceMonitor for Prometheus monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cert-webhook-system
+  namespace: docker-stacks
+  labels:
+    app.kubernetes.io/name: cert-webhook-system
+    app.kubernetes.io/component: certificate-automation
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cert-webhook-handler
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
