@@ -166,7 +166,7 @@ jobs:
 
     - name: Upload image artifact
       if: github.event_name == 'push'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: docker-image
         path: /tmp/image.tar
@@ -221,7 +221,7 @@ jobs:
         output-file: sbom.spdx.json
 
     - name: Upload SBOM
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: sbom
         path: sbom.spdx.json
