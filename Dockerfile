@@ -19,7 +19,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY cmd/ ./cmd/
+COPY cmd ./cmd
 
 # Build the applications with version information
 RUN CGO_ENABLED=0 GOOS=linux go build \
