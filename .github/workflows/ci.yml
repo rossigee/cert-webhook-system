@@ -83,7 +83,7 @@ jobs:
 
     - name: Run security scan
       run: |
-        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@v2.22.8
         gosec -no-fail -fmt sarif -out gosec.sarif ./...
 
     - name: Upload SARIF file
