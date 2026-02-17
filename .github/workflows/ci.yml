@@ -88,9 +88,9 @@ jobs:
         name: codecov-umbrella
 
     - name: Run security scan
-      uses: securecodebox/actions-gosec@master
-      with:
-        args: '-fmt sarif -out gosec.sarif ./...'
+      run: |
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        gosec -fmt sarif -out gosec.sarif ./...
 
     - name: Upload SARIF file
       if: github.event_name == 'push'
