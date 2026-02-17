@@ -74,12 +74,12 @@ jobs:
         go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
-       if: github.event_name == 'push'
-       uses: codecov/codecov-action@v5
-       with:
-         file: ./coverage.txt
-         flags: unittests
-         name: codecov-umbrella
+      if: github.event_name == 'push'
+      uses: codecov/codecov-action@v5
+      with:
+        file: ./coverage.txt
+        flags: unittests
+        name: codecov-umbrella
 
   build-and-scan:
     name: Build and Security Scan
