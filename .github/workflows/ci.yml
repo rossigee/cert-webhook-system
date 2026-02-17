@@ -121,7 +121,7 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        outputs: type=docker,dest=/tmp/image.tar
+        outputs: type=oci,dest=/tmp/image.tar
 
     - name: Load image for scanning
       run: docker load -i /tmp/image.tar
