@@ -74,23 +74,12 @@ jobs:
         go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
-      if: github.event_name == 'push'
-      uses: codecov/codecov-action@v5
-      with:
-        file: ./coverage.txt
-        flags: unittests
-        name: codecov-umbrella
-
-    - name: Run security scan
-      run: |
-        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@v2.22.8
-        gosec -fmt sarif -out gosec.sarif ./... || true
-
-    - name: Upload SARIF file
-      if: github.event_name == 'push'
-      uses: github/codeql-action/upload-sarif@v4
-      with:
-        sarif_file: gosec.sarif
+       if: github.event_name == 'push'
+       uses: codecov/codecov-action@v5
+       with:
+         file: ./coverage.txt
+         flags: unittests
+         name: codecov-umbrella
 
   build-and-scan:
     name: Build and Security Scan
