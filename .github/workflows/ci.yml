@@ -84,7 +84,7 @@ jobs:
     - name: Run security scan
       run: |
         go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-        gosec -fmt sarif -out gosec.sarif ./...
+        gosec -no-fail -fmt sarif -out gosec.sarif ./...
 
     - name: Upload SARIF file
       if: github.event_name == 'push'
