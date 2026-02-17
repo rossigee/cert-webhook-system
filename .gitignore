@@ -84,6 +84,9 @@ coverage.txt
 coverage.html
 *.cover
 
+# Security scan reports
+*.sarif
+
 # Profiling data
 *.prof
 *.trace
