@@ -12,7 +12,6 @@ linters:
   disable:
     - gosec # Disable for now due to dependency issues
   settings:
-    govet:
     misspell:
       locale: US
       ignore-rules:
