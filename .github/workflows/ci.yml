@@ -122,6 +122,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         outputs: type=oci,dest=/tmp/image.tar
+        no-cache: true
 
     - name: Load image for scanning
       run: docker load -i /tmp/image.tar
