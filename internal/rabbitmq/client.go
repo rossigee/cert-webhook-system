@@ -4,16 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+const (
+	maxReconnectAttempts = 5
+	initialBackoff       = 1 * time.Second
+	maxBackoff           = 30 * time.Second
+)
+
 // Client represents a RabbitMQ client
 type Client struct {
+	mu      sync.Mutex
 	conn    *amqp.Connection
 	channel *amqp.Channel
 	url     string
+	closed  bool
 }
 
 // NewClient creates a new RabbitMQ client
@@ -26,6 +36,8 @@ func NewClient(url string) (*Client, error) {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)
 	}
 
+	client.watchConnection()
+
 	return client, nil
 }
 
@@ -33,38 +45,85 @@ func NewClient(url string) (*Client, error) {
 func (c *Client) connect() error {
 	var err error
 
-	// Connect to RabbitMQ
 	c.conn, err = amqp.Dial(c.url)
 	if err != nil {
 		return fmt.Errorf("failed to connect to RabbitMQ: %w", err)
 	}
 
-	// Create channel
 	c.channel, err = c.conn.Channel()
 	if err != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 		return fmt.Errorf("failed to open channel: %w", err)
 	}
 
 	return nil
 }
 
-// reconnect attempts to reconnect to RabbitMQ
-func (c *Client) reconnect() error {
-	// Close existing connections
-	if c.channel != nil {
-		c.channel.Close()
-	}
-	if c.conn != nil {
-		c.conn.Close()
+// watchConnection listens for connection close events and triggers reconnection
+func (c *Client) watchConnection() {
+	go func() {
+		closeCh := c.conn.NotifyClose(make(chan *amqp.Error, 1))
+		err := <-closeCh
+		if err == nil {
+			return // graceful close
+		}
+
+		c.mu.Lock()
+		if c.closed {
+			c.mu.Unlock()
+			return
+		}
+		c.mu.Unlock()
+
+		_ = c.reconnectWithBackoff()
+	}()
+}
+
+// reconnectWithBackoff attempts to reconnect with exponential backoff
+func (c *Client) reconnectWithBackoff() error {
+	for attempt := range maxReconnectAttempts {
+		backoff := time.Duration(math.Min(
+			float64(initialBackoff)*math.Pow(2, float64(attempt)),
+			float64(maxBackoff),
+		))
+		time.Sleep(backoff)
+
+		c.mu.Lock()
+		if c.closed {
+			c.mu.Unlock()
+			return fmt.Errorf("client closed during reconnection")
+		}
+
+		if err := c.reconnect(); err != nil {
+			c.mu.Unlock()
+			continue
+		}
+
+		c.mu.Unlock()
+		c.watchConnection()
+		return nil
 	}
 
-	// Attempt to reconnect
+	return fmt.Errorf("failed to reconnect after %d attempts", maxReconnectAttempts)
+}
+
+// reconnect attempts to reconnect to RabbitMQ
+func (c *Client) reconnect() error {
+	if c.channel != nil {
+		_ = c.channel.Close()
+	}
+	if c.conn != nil && !c.conn.IsClosed() {
+		_ = c.conn.Close()
+	}
+
 	return c.connect()
 }
 
 // ensureConnection ensures the connection is healthy and reconnects if necessary
 func (c *Client) ensureConnection() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.conn == nil || c.conn.IsClosed() || c.channel == nil {
 		return c.reconnect()
 	}
@@ -72,42 +131,42 @@ func (c *Client) ensureConnection() error {
 }
 
 // Publish publishes a message to RabbitMQ
-func (c *Client) Publish(ctx context.Context, exchange, routingKey string, message interface{}) error {
-	// Ensure connection is healthy
+func (c *Client) Publish(ctx context.Context, exchange, routingKey string, message any) error {
 	if err := c.ensureConnection(); err != nil {
 		return fmt.Errorf("failed to ensure connection: %w", err)
 	}
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// Declare exchange (idempotent)
 	if err := c.channel.ExchangeDeclare(
 		exchange,
-		"topic", // type
-		true,    // durable
-		false,   // auto-deleted
-		false,   // internal
-		false,   // no-wait
-		nil,     // arguments
+		"topic",
+		true,  // durable
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil,
 	); err != nil {
 		return fmt.Errorf("failed to declare exchange: %w", err)
 	}
 
-	// Convert message to JSON
 	body, err := json.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Publish message
 	err = c.channel.PublishWithContext(
 		ctx,
-		exchange,   // exchange
-		routingKey, // routing key
-		false,      // mandatory
-		false,      // immediate
+		exchange,
+		routingKey,
+		false, // mandatory
+		false, // immediate
 		amqp.Publishing{
 			ContentType:  "application/json",
 			Body:         body,
-			DeliveryMode: amqp.Persistent, // make message persistent
+			DeliveryMode: amqp.Persistent,
 			Timestamp:    time.Now(),
 		},
 	)
@@ -120,18 +179,26 @@ func (c *Client) Publish(ctx context.Context, exchange, routingKey string, messa
 
 // HealthCheck performs a health check on the RabbitMQ connection
 func (c *Client) HealthCheck() error {
-	if err := c.ensureConnection(); err != nil {
-		return fmt.Errorf("connection unhealthy: %w", err)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn == nil || c.conn.IsClosed() {
+		return fmt.Errorf("connection is closed")
+	}
+	if c.channel == nil {
+		return fmt.Errorf("channel is nil")
 	}
 
-	// Try to declare a temporary queue to test the connection
+	// Use a passive queue inspect on a non-existent queue to verify channel liveness.
+	// QueueInspect returns an error for non-existent queues, but the channel stays open
+	// if the connection is healthy. We use an empty-name auto-delete queue declare instead.
 	_, err := c.channel.QueueDeclare(
-		"health-check", // name
-		false,          // durable
-		true,           // delete when unused
-		true,           // exclusive
-		true,           // no-wait
-		nil,            // arguments
+		"",    // empty name = server-generated
+		false, // durable
+		true,  // auto-delete
+		true,  // exclusive
+		false, // no-wait (we want the server response)
+		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
@@ -142,6 +209,11 @@ func (c *Client) HealthCheck() error {
 
 // Close closes the RabbitMQ connection
 func (c *Client) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.closed = true
+
 	var err error
 
 	if c.channel != nil {

@@ -12,7 +12,7 @@ on:
 env:
   REGISTRY: harbor.golder.lan/library
   IMAGE_NAME: cert-webhook-system
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.25.7"
 
 jobs:
   semantic-version:

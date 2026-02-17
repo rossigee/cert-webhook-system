@@ -78,6 +78,12 @@ fmt:
 
 ## Run linting
 lint:
+	@if ! command -v golangci-lint >/dev/null 2>&1; then echo "golangci-lint not found. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; exit 1; fi
+	@version=$$(golangci-lint version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1); \
+	if [ "$$(printf '%s\n' "$$version" "2.9.0" | sort -V | head -n1)" != "2.9.0" ]; then \
+		echo "golangci-lint version $$version is too old. Please upgrade to >= 2.9.0"; \
+		exit 1; \
+	fi
 	golangci-lint run
 
 ## Show help

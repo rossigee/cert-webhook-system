@@ -1,41 +1,37 @@
 # golangci-lint configuration file
-# Configuration version
-version: '1.62'
-
-linters-settings:
-  gofmt:
-    simplify: true
-  govet:
-    settings:
-      shadow:
-        strict: true
-  misspell:
-    locale: US
-    ignore-words:
-      - colour
+version: "2"
 
 linters:
   enable:
-    - gofmt
-    - goimports
     - govet
     - ineffassign
     - misspell
     - unused
     - staticcheck
     - errcheck
-    - gosimple
-    - typecheck
   disable:
     - gosec # Disable for now due to dependency issues
+  settings:
+    govet:
+    misspell:
+      locale: US
+      ignore-rules:
+        - colour
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
 
 run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck

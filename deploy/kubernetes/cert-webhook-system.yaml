@@ -100,22 +100,22 @@ spec:
           limits:
             cpu: 200m
             memory: 128Mi
+        ports:
+        - containerPort: 9250
+          name: health
+          protocol: TCP
         livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - "pgrep controller"
+          httpGet:
+            path: /healthz
+            port: 9250
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
         readinessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - "pgrep controller"
+          httpGet:
+            path: /readyz
+            port: 9250
           initialDelaySeconds: 5
           periodSeconds: 10
           timeoutSeconds: 5
