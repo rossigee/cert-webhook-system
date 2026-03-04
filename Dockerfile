@@ -21,6 +21,12 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Explicitly copy cmd directory
+COPY cmd ./cmd
+
+# Debug: list what's in /app
+RUN ls -la /app
+
 # Build the applications with version information
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION} -X main.buildDate=${BUILD_DATE} -X main.gitCommit=${GIT_COMMIT}" -o controller ./cmd/controller
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION} -X main.buildDate=${BUILD_DATE} -X main.gitCommit=${GIT_COMMIT}" -o webhook ./cmd/webhook
