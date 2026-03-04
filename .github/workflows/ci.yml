@@ -120,7 +120,8 @@ jobs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         outputs: type=oci,dest=/tmp/image.tar
-        no-cache: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
     - name: Load image for scanning
       run: docker load -i /tmp/image.tar
