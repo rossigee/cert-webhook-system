@@ -3,7 +3,7 @@
 .gitignore
 
 # CI/CD
-.github
+#.github
 
 # Documentation
 *.md
