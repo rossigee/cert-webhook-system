@@ -20,6 +20,7 @@ RUN go mod download
 
 # Copy source code
 COPY . .
+COPY cmd /app/cmd
 RUN ls -la /app
 
 # Build the applications with version information
