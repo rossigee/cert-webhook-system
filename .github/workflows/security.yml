@@ -39,8 +39,15 @@ jobs:
         repo-checkout: false
 
     - name: Run Nancy vulnerability scanner
+      env:
+        OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
+        OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
       run: |
-        go list -json -deps ./... | docker run --rm -i sonatypecommunity/nancy:latest sleuth
+        if [ -n "$OSS_INDEX_USERNAME" ] && [ -n "$OSS_INDEX_TOKEN" ]; then
+          go list -json -deps ./... | docker run --rm -i sonatypecommunity/nancy:latest sleuth --username "$OSS_INDEX_USERNAME" --token "$OSS_INDEX_TOKEN"
+        else
+          echo "OSS Index credentials not configured, skipping Nancy scan"
+        fi
 
   code-scanning:
     name: CodeQL Analysis
