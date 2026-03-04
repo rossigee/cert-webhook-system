@@ -121,6 +121,7 @@ jobs:
         tags: cert-webhook-system:security-scan
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        no-cache: true
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
