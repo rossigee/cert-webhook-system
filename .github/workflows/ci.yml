@@ -68,10 +68,15 @@ jobs:
       uses: golangci/golangci-lint-action@v9
       with:
         version: v2.10.1
-        args: --timeout=5m
+        args: --timeout=5m --enable=gosec,staticcheck,ineffassign
 
     - name: Run go mod tidy
       run: go mod tidy
+
+    - name: Check dependency licenses
+      run: |
+        go install github.com/google/go-licenses@latest
+        go-licenses check ./...
 
     - name: Run tests with coverage
       run: |
