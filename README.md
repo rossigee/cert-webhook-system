@@ -1,6 +1,6 @@
 # Certificate Webhook System
 
-A high-performance Go microservice system for handling certificate renewal events from cert-manager and distributing them via RabbitMQ to downstream consumers.
+A high-performance Go microservice for handling certificate renewal events from cert-manager
 
 ## Architecture
 
