@@ -141,7 +141,7 @@ jobs:
       id: grype-scan
       with:
         image: "cert-webhook-system:security-scan"
-        fail-build-on: "high"
+        fail-build: "high"
         severity-cutoff: "medium"
 
     - name: Upload Grype scan results
