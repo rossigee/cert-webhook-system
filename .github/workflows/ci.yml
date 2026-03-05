@@ -12,6 +12,10 @@ on:
       - '*.md'
       - 'docs/**'
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: harbor.golder.lan/library
   IMAGE_NAME: cert-webhook-system
