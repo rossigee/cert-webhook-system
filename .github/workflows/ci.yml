@@ -175,6 +175,7 @@ jobs:
     - name: Pull image from GHCR
       run: |
         docker pull ghcr.io/${{ github.repository }}:latest
+        docker pull ghcr.io/${{ github.repository }}:master
 
     - name: Generate SBOM
       uses: anchore/sbom-action@v0
