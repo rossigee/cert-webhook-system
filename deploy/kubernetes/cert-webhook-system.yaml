@@ -75,7 +75,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: controller
-        image: cert-webhook-system:v1.0.0
+        image: harbor.golder.lan/library/cert-webhook-system:v0.2.4
         command: ["/controller"]
         securityContext:
           allowPrivilegeEscalation: false
@@ -155,7 +155,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: webhook-handler
-        image: cert-webhook-system:v1.0.0
+        image: harbor.golder.lan/library/cert-webhook-system:v0.2.4
         command: ["/webhook"]
         securityContext:
           allowPrivilegeEscalation: false
