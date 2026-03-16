@@ -3,7 +3,7 @@ module github.com/rossigee/cert-webhook-system
 go 1.26.0
 
 require (
-	github.com/cert-manager/cert-manager v1.19.4
+	github.com/cert-manager/cert-manager v1.20.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-logr/logr v1.4.3
 	github.com/prometheus/client_golang v1.23.2
@@ -94,7 +94,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.35.2 // indirect
 	k8s.io/apiextensions-apiserver v0.35.2 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
+	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	sigs.k8s.io/gateway-api v1.5.0 // indirect
