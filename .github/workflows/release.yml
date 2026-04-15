@@ -198,7 +198,7 @@ jobs:
         sha256sum controller-* webhook-* > checksums.txt
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: ${{ needs.semantic-version.outputs.version }}
         name: Release ${{ needs.semantic-version.outputs.version }}
