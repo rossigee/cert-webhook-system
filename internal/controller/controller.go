@@ -27,7 +27,6 @@ import (
 type Config struct {
 	Clientset      kubernetes.Interface
 	Config         *rest.Config
-	WebhookURL     string
 	RabbitMQClient *rabbitmq.Client
 	Logger         logr.Logger
 	HealthPort     int
@@ -41,7 +40,6 @@ type Controller struct {
 	certificateLister  certlisters.CertificateLister
 	certificatesSynced cache.InformerSynced
 	workqueue          workqueue.TypedRateLimitingInterface[string]
-	webhookURL         string
 	rabbitmqClient     *rabbitmq.Client
 	logger             logr.Logger
 	processedCerts     sync.Map
@@ -71,7 +69,6 @@ func New(config Config) (*Controller, error) {
 		certificateLister:  certificateInformer.Lister(),
 		certificatesSynced: certificateInformer.Informer().HasSynced,
 		workqueue:          workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[string]()),
-		webhookURL:         config.WebhookURL,
 		rabbitmqClient:     config.RabbitMQClient,
 		logger:             config.Logger,
 		healthPort:         healthPort,
@@ -242,29 +239,21 @@ func (c *Controller) processCertificate(ctx context.Context, cert *certv1.Certif
 		"resourceVersion", cert.ResourceVersion,
 	)
 
-	if err := c.triggerWebhook(ctx, cert); err != nil {
+	if err := c.publishToRabbitMQ(ctx, cert); err != nil {
 		c.processedCerts.Delete(processKey)
-		return fmt.Errorf("failed to trigger webhook for certificate %s/%s: %w",
+		return fmt.Errorf("failed to publish event for certificate %s/%s: %w",
 			cert.Namespace, cert.Name, err)
 	}
 
 	return nil
 }
 
-// triggerWebhook sends a webhook notification for the certificate
-func (c *Controller) triggerWebhook(ctx context.Context, cert *certv1.Certificate) error {
-	if c.rabbitmqClient != nil {
-		return c.publishToRabbitMQ(ctx, cert)
-	}
-
-	c.logger.Info("No RabbitMQ client available, skipping webhook",
-		"certificate", fmt.Sprintf("%s/%s", cert.Namespace, cert.Name))
-
-	return nil
-}
-
 // publishToRabbitMQ publishes certificate renewal event to RabbitMQ
 func (c *Controller) publishToRabbitMQ(ctx context.Context, cert *certv1.Certificate) error {
+	if c.rabbitmqClient == nil {
+		return fmt.Errorf("RabbitMQ client not configured")
+	}
+
 	annotations := cert.Annotations
 	if annotations == nil {
 		annotations = make(map[string]string)

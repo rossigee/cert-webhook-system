@@ -20,7 +20,6 @@ func TestNewController(t *testing.T) {
 	ctrl, err := New(Config{
 		Clientset:      clientset,
 		Config:         config,
-		WebhookURL:     "http://test.example.com/webhook",
 		RabbitMQClient: nil,
 		Logger:         logr.Discard(),
 	})
@@ -40,7 +39,6 @@ func TestProcessCertificate_WebhookNotEnabled(t *testing.T) {
 	ctrl, err := New(Config{
 		Clientset:  clientset,
 		Config:     &rest.Config{},
-		WebhookURL: "http://test.example.com/webhook",
 		Logger:     logr.Discard(),
 	})
 	if err != nil {
@@ -67,7 +65,6 @@ func TestProcessCertificate_NotReady(t *testing.T) {
 	ctrl, err := New(Config{
 		Clientset:  clientset,
 		Config:     &rest.Config{},
-		WebhookURL: "http://test.example.com/webhook",
 		Logger:     logr.Discard(),
 	})
 	if err != nil {
@@ -104,7 +101,6 @@ func TestProcessCertificate_ReadyNoRabbitMQ(t *testing.T) {
 	ctrl, err := New(Config{
 		Clientset:      clientset,
 		Config:         &rest.Config{},
-		WebhookURL:     "http://test.example.com/webhook",
 		RabbitMQClient: nil,
 		Logger:         logr.Discard(),
 	})
@@ -139,10 +135,10 @@ func TestProcessCertificate_ReadyNoRabbitMQ(t *testing.T) {
 		},
 	}
 
-	// Should succeed without error (no RabbitMQ = skip publishing)
+	// Should fail because RabbitMQ is not configured
 	err = ctrl.processCertificate(context.Background(), cert)
-	if err != nil {
-		t.Errorf("Expected no error for ready cert without RabbitMQ, got: %v", err)
+	if err == nil {
+		t.Errorf("Expected error for ready cert without RabbitMQ, got nil")
 	}
 }
 
@@ -152,7 +148,6 @@ func TestProcessCertificate_DeduplicatesEvents(t *testing.T) {
 	ctrl, err := New(Config{
 		Clientset:      clientset,
 		Config:         &rest.Config{},
-		WebhookURL:     "http://test.example.com/webhook",
 		RabbitMQClient: nil,
 		Logger:         logr.Discard(),
 	})
@@ -183,16 +178,13 @@ func TestProcessCertificate_DeduplicatesEvents(t *testing.T) {
 		},
 	}
 
-	// Process twice with same resourceVersion
-	_ = ctrl.processCertificate(context.Background(), cert)
+	// Simulate a prior successful processing by pre-loading the dedup key
+	processKey := "default/test-cert:1"
+	ctrl.processedCerts.Store(processKey, true)
+
+	// Second call with same resourceVersion should be deduplicated
 	err = ctrl.processCertificate(context.Background(), cert)
 	if err != nil {
 		t.Errorf("Expected no error on duplicate processing, got: %v", err)
-	}
-
-	// Verify key was stored
-	key := "default/test-cert:1"
-	if _, ok := ctrl.processedCerts.Load(key); !ok {
-		t.Error("Expected processedCerts to contain the certificate key")
 	}
 }

@@ -1,40 +1,69 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents (Claude, OpenCode, etc.) when working with code in this repository.
 
 ## Project Overview
 
-This is a high-performance Go microservice system for handling certificate renewal events from cert-manager and distributing them via RabbitMQ to downstream consumers. The system consists of two main components that work together to provide event-driven certificate deployment automation.
+This is a high-performance Go microservice system for handling certificate renewal events from cert-manager and distributing them via RabbitMQ to downstream consumers. The system consists of two independent ingress components that both produce events into the same RabbitMQ pipeline.
+
+**Important**: This repository only provides event **producers/ingress points**. Downstream consumers that read from RabbitMQ and act on certificate events (e.g., restarting Docker containers) are **out of scope** and live in other repositories.
 
 ## Architecture
 
-The system follows a microservices pattern with two distinct components:
+The system follows an event-driven ingress pattern with two independent entry points:
+
+```
+┌──────────────────┐     ┌──────────────────┐
+│   cert-manager   │     │   External HTTP  │
+│   (Ready=True)   │     │   POST request   │
+└────────┬─────────┘     └────────┬─────────┘
+         │                        │
+    ┌────▼────┐              ┌────▼────┐
+    │Controller│              │ Webhook │
+    │ (watcher)│              │ (server)│
+    └────┬─────┘              └────┬────┘
+         │                        │
+         └────────┬───────────────┘
+                  │
+            ┌─────▼──────┐
+            │  RabbitMQ  │
+            │  Exchange  │
+            └─────┬──────┘
+                  │
+         ┌────────▼────────┐
+         │   Downstream    │
+         │   Consumers     │
+         │  (other repos)  │
+         └─────────────────┘
+```
 
 ### 1. Certificate Event Controller (`./cmd/controller/`)
 - **Purpose**: Kubernetes controller that watches Certificate resources using cert-manager APIs
 - **Technology**: Uses Kubernetes informers and workqueues for efficient event processing
 - **Trigger**: Detects when certificates reach Ready=True state
-- **Output**: Publishes renewal events to RabbitMQ and/or calls webhook endpoint
+- **Output**: Publishes renewal events to RabbitMQ
 - **Key Files**: 
   - `cmd/controller/main.go` - Application entry point with CLI setup
   - `internal/controller/controller.go` - Core controller logic with Kubernetes informers
 
 ### 2. Certificate Webhook Handler (`./cmd/webhook/`)
-- **Purpose**: HTTP server that processes certificate webhook requests
+- **Purpose**: HTTP server that provides an alternative ingress path for certificate events
 - **Technology**: Gin-based HTTP server with structured logging
-- **Input**: HTTP POST requests with certificate metadata
-- **Output**: Publishes events to RabbitMQ for downstream consumption
+- **Input**: HTTP POST requests with certificate metadata (e.g., from external systems or cert-manager webhooks)
+- **Output**: Publishes events to RabbitMQ using the same event format as the controller
 - **Key Files**:
   - `cmd/webhook/main.go` - HTTP server setup and configuration
   - `internal/webhook/webhook.go` - HTTP handlers and request processing
 
+**Key point**: These are two independent ingress paths to the same event stream. They do not call each other. The controller does not POST to the webhook.
+
 ### Supporting Components
 - **RabbitMQ Client** (`internal/rabbitmq/client.go`): Robust RabbitMQ integration with connection management, auto-reconnection, and health checks
-- **Event Message Format**: Structured JSON with certificate metadata, deployment targets, and container information
+- **Event Message Format** (`internal/event/event.go`): Structured JSON with certificate metadata, deployment targets, and container information
 
 ## Certificate Configuration
 
-Certificates must be labeled and annotated to enable webhook processing:
+Certificates must be labeled and annotated to enable event processing:
 
 **Required Label**:
 - `cert-webhook.golder.tech/enabled: "true"`
@@ -82,7 +111,7 @@ make lint
 
 ### Local Development
 ```bash
-# Run controller locally (requires kubeconfig and optional RabbitMQ)
+# Run controller locally (requires kubeconfig and RabbitMQ)
 make run-controller
 
 # Run webhook handler locally (requires RabbitMQ URL)
@@ -102,14 +131,13 @@ Both components use environment variables prefixed with `CERT_WEBHOOK_`:
 
 ### Controller Environment Variables
 - `CERT_WEBHOOK_KUBECONFIG` - Path to kubeconfig (optional, uses in-cluster config)
-- `CERT_WEBHOOK_WEBHOOK_URL` - Webhook endpoint URL 
-- `CERT_WEBHOOK_RABBITMQ_URL` - RabbitMQ connection string (optional)
+- `CERT_WEBHOOK_RABBITMQ_URL` - RabbitMQ connection string (**required**)
 - `CERT_WEBHOOK_LOG_LEVEL` - Logging level (debug/info/warn/error)
 
 ### Webhook Handler Environment Variables
 - `CERT_WEBHOOK_KUBECONFIG` - Path to kubeconfig (optional)
 - `CERT_WEBHOOK_PORT` - HTTP port (default: 8080)
-- `CERT_WEBHOOK_RABBITMQ_URL` - RabbitMQ connection string (required)
+- `CERT_WEBHOOK_RABBITMQ_URL` - RabbitMQ connection string (**required**)
 - `CERT_WEBHOOK_LOG_LEVEL` - Logging level
 
 ## Key Design Patterns
@@ -123,7 +151,6 @@ Both components use environment variables prefixed with `CERT_WEBHOOK_`:
 ### Event-Driven Architecture
 - Publishes structured JSON events to RabbitMQ topic exchanges
 - Uses routing keys for message filtering by consumers
-- Supports both direct RabbitMQ publishing and HTTP webhook patterns
 - Implements graceful degradation when RabbitMQ is unavailable
 
 ### Production Readiness Features

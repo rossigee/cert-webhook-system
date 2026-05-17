@@ -84,8 +84,6 @@ spec:
             - ALL
           readOnlyRootFilesystem: true
         env:
-        - name: CERT_WEBHOOK_WEBHOOK_URL
-          value: "http://cert-webhook-handler.docker-stacks.svc.cluster.local/webhook/certificate"
         - name: CERT_WEBHOOK_LOG_LEVEL
           value: "info"
         - name: CERT_WEBHOOK_RABBITMQ_URL

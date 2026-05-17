@@ -46,15 +46,11 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 
 	rootCmd.PersistentFlags().String("kubeconfig", "", "Path to kubeconfig file")
-	rootCmd.PersistentFlags().String("webhook-url",
-		"http://cert-webhook-handler.docker-stacks.svc.cluster.local/webhook/certificate",
-		"Webhook URL to call")
-	rootCmd.PersistentFlags().String("rabbitmq-url", "", "RabbitMQ connection URL")
+	rootCmd.PersistentFlags().String("rabbitmq-url", "", "RabbitMQ connection URL (required)")
 	rootCmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().Int("health-port", 9250, "Health check HTTP port")
 
 	_ = viper.BindPFlag("kubeconfig", rootCmd.PersistentFlags().Lookup("kubeconfig"))
-	_ = viper.BindPFlag("webhook-url", rootCmd.PersistentFlags().Lookup("webhook-url"))
 	_ = viper.BindPFlag("rabbitmq-url", rootCmd.PersistentFlags().Lookup("rabbitmq-url"))
 	_ = viper.BindPFlag("log-level", rootCmd.PersistentFlags().Lookup("log-level"))
 	_ = viper.BindPFlag("health-port", rootCmd.PersistentFlags().Lookup("health-port"))
@@ -74,7 +70,6 @@ func runController(cmd *cobra.Command, args []string) error {
 		"version", version,
 		"build-date", buildDate,
 		"git-commit", gitCommit,
-		"webhook-url", viper.GetString("webhook-url"),
 		"log-level", viper.GetString("log-level"),
 	)
 
@@ -98,19 +93,20 @@ func runController(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
-	var rabbitmqClient *rabbitmq.Client
-	if rmqURL := viper.GetString("rabbitmq-url"); rmqURL != "" {
-		rabbitmqClient, err = rabbitmq.NewClient(rmqURL)
-		if err != nil {
-			return fmt.Errorf("failed to create RabbitMQ client: %w", err)
-		}
-		defer func() { _ = rabbitmqClient.Close() }()
+	rmqURL := viper.GetString("rabbitmq-url")
+	if rmqURL == "" {
+		return fmt.Errorf("--rabbitmq-url is required (set via flag or CERT_WEBHOOK_RABBITMQ_URL env var)")
 	}
+
+	rabbitmqClient, err := rabbitmq.NewClient(rmqURL)
+	if err != nil {
+		return fmt.Errorf("failed to create RabbitMQ client: %w", err)
+	}
+	defer func() { _ = rabbitmqClient.Close() }()
 
 	ctrl, err := controller.New(controller.Config{
 		Clientset:      clientset,
 		Config:         config,
-		WebhookURL:     viper.GetString("webhook-url"),
 		RabbitMQClient: rabbitmqClient,
 		Logger:         logger,
 		HealthPort:     viper.GetInt("health-port"),
