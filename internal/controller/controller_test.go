@@ -37,9 +37,9 @@ func TestProcessCertificate_WebhookNotEnabled(t *testing.T) {
 	clientset := fake.NewClientset()
 
 	ctrl, err := New(Config{
-		Clientset:  clientset,
-		Config:     &rest.Config{},
-		Logger:     logr.Discard(),
+		Clientset: clientset,
+		Config:    &rest.Config{},
+		Logger:    logr.Discard(),
 	})
 	if err != nil {
 		t.Fatalf("Failed to create controller: %v", err)
@@ -63,9 +63,9 @@ func TestProcessCertificate_NotReady(t *testing.T) {
 	clientset := fake.NewClientset()
 
 	ctrl, err := New(Config{
-		Clientset:  clientset,
-		Config:     &rest.Config{},
-		Logger:     logr.Discard(),
+		Clientset: clientset,
+		Config:    &rest.Config{},
+		Logger:    logr.Discard(),
 	})
 	if err != nil {
 		t.Fatalf("Failed to create controller: %v", err)
