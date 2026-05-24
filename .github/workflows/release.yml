@@ -12,37 +12,9 @@ env:
   GO_VERSION: "1.26.3"
 
 jobs:
-  semantic-version:
-    name: Determine Version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.semantic.outputs.new_tag }}
-      changelog: ${{ steps.semantic.outputs.changelog }}
-      released: ${{ steps.semantic.outputs.released }}
-      
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Get semantic version
-      id: semantic
-      uses: mathieudutour/github-tag-action@v6.2
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        release_branches: master
-        pre_release_branches: develop,beta
-        default_bump: patch
-        tag_prefix: v
-        dry_run: false
-
   release-build:
     name: Build Release Assets
     runs-on: ubuntu-latest
-    needs: semantic-version
-    if: needs.semantic-version.outputs.released == 'true' || github.event_name == 'workflow_dispatch'
     
     strategy:
       matrix:
@@ -86,7 +58,7 @@ jobs:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
         CGO_ENABLED: 0
-        VERSION: ${{ needs.semantic-version.outputs.version }}
+        VERSION: ${{ github.ref_name }}
       run: |
         mkdir -p dist
         # Build controller
@@ -112,8 +84,7 @@ jobs:
   docker-release:
     name: Build and Push Release Images
     runs-on: ubuntu-latest
-    needs: [semantic-version, release-build]
-    if: needs.semantic-version.outputs.released == 'true' || github.event_name == 'workflow_dispatch'
+    needs: release-build
     
     steps:
     - name: Checkout code
@@ -135,12 +106,12 @@ jobs:
       with:
         images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=semver,pattern={{version}},value=${{ needs.semantic-version.outputs.version }}
-          type=semver,pattern={{major}}.{{minor}},value=${{ needs.semantic-version.outputs.version }}
-          type=semver,pattern={{major}},value=${{ needs.semantic-version.outputs.version }}
+          type=semver,pattern={{version}},value=${{ github.ref_name }}
+          type=semver,pattern={{major}}.{{minor}},value=${{ github.ref_name }}
+          type=semver,pattern={{major}},value=${{ github.ref_name }}
           type=raw,value=latest
         labels: |
-          org.opencontainers.image.version=${{ needs.semantic-version.outputs.version }}
+          org.opencontainers.image.version=${{ github.ref_name }}
           org.opencontainers.image.revision=${{ github.sha }}
 
     - name: Build and push Docker images
@@ -154,7 +125,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          VERSION=${{ needs.semantic-version.outputs.version }}
+          VERSION=${{ github.ref_name }}
           BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
 
     - name: Generate SBOM
@@ -162,19 +133,18 @@ jobs:
       with:
         image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         format: spdx-json
-        output-file: sbom-${{ needs.semantic-version.outputs.version }}.spdx.json
+        output-file: sbom-${{ github.ref_name }}.spdx.json
 
     - name: Upload SBOM artifact
       uses: actions/upload-artifact@v7
       with:
         name: sbom-release
-        path: sbom-${{ needs.semantic-version.outputs.version }}.spdx.json
+        path: sbom-${{ github.ref_name }}.spdx.json
 
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [semantic-version, release-build, docker-release]
-    if: needs.semantic-version.outputs.released == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [release-build, docker-release]
     
     steps:
     - name: Checkout code
@@ -197,12 +167,12 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v3
       with:
-        tag_name: ${{ needs.semantic-version.outputs.version }}
-        name: Release ${{ needs.semantic-version.outputs.version }}
-        body: ${{ needs.semantic-version.outputs.changelog }}
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        generate_release_notes: true
         files: |
           release-assets/*
-          artifacts/sbom-release/sbom-${{ needs.semantic-version.outputs.version }}.spdx.json
+          artifacts/sbom-release/sbom-${{ github.ref_name }}.spdx.json
         draft: false
         prerelease: false
         generate_release_notes: true
@@ -211,8 +181,7 @@ jobs:
   update-deployment:
     name: Update Deployment Manifests
     runs-on: ubuntu-latest
-    needs: [semantic-version, docker-release]
-    if: needs.semantic-version.outputs.released == 'true' || github.event_name == 'workflow_dispatch'
+    needs: docker-release
     
     steps:
     - name: Checkout code
@@ -224,7 +193,7 @@ jobs:
     - name: Update Kubernetes manifests
       run: |
         # Update image tags in deployment manifests
-        sed -i "s|image: .*${{ env.IMAGE_NAME }}:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.semantic-version.outputs.version }}|g" \
+        sed -i "s|image: .*${{ env.IMAGE_NAME }}:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}|g" \
           deploy/kubernetes/*.yaml
 
     - name: Commit manifest updates
@@ -235,15 +204,14 @@ jobs:
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
-          git commit -m "chore: update deployment manifests to ${{ needs.semantic-version.outputs.version }}"
+          git commit -m "chore: update deployment manifests to ${{ github.ref_name }}"
           git push
         fi
 
   notify-deployment:
     name: Notify Deployment
     runs-on: ubuntu-latest
-    needs: [semantic-version, update-deployment]
-    if: always() && (needs.semantic-version.outputs.released == 'true' || github.event_name == 'workflow_dispatch')
+    needs: update-deployment
     
     steps:
     - name: Notify Slack
@@ -251,7 +219,7 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: success
-        text: "🚀 Released ${{ env.IMAGE_NAME }} ${{ needs.semantic-version.outputs.version }}"
+        text: "🚀 Released ${{ env.IMAGE_NAME }} ${{ github.ref_name }}"
         webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
     - name: Notify on failure
@@ -259,5 +227,5 @@ jobs:
       uses: 8398a7/action-slack@v3
       with:
         status: failure
-        text: "❌ Failed to release ${{ env.IMAGE_NAME }} ${{ needs.semantic-version.outputs.version }}"
+        text: "❌ Failed to release ${{ env.IMAGE_NAME }} ${{ github.ref_name }}"
         webhook_url: ${{ secrets.SLACK_WEBHOOK }}
