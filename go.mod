@@ -12,7 +12,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1
-	sigs.k8s.io/controller-runtime v0.23.3
+	sigs.k8s.io/controller-runtime v0.24.1
 )
 
 require (
