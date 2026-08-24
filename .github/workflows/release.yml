@@ -9,7 +9,7 @@ on:
 env:
   REGISTRY: harbor.golder.lan/library
   IMAGE_NAME: cert-webhook-system
-  GO_VERSION: "1.26.3"
+  GO_VERSION: "1.27.0"
 
 jobs:
   release-build:

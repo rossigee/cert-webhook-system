@@ -20,7 +20,7 @@ permissions:
 env:
   REGISTRY: harbor.golder.lan/library
   IMAGE_NAME: cert-webhook-system
-  GO_VERSION: "1.26.3"
+  GO_VERSION: "1.27.0"
 
 jobs:
   lint-and-test:
@@ -66,7 +66,7 @@ jobs:
     - name: Install golangci-lint
       uses: golangci/golangci-lint-action@v9
       with:
-        version: v2.10.1
+        version: v2.13.1
         args: --timeout=5m --enable=gosec,staticcheck,ineffassign
 
     - name: Run go mod tidy
