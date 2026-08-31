@@ -10,7 +10,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.14.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	k8s.io/apimachinery v0.36.4
+	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v0.36.4
 	sigs.k8s.io/controller-runtime v0.24.1
 )
